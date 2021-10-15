@@ -31,8 +31,8 @@ public class JSONBookMetadataFormatter implements BookMetadataFormatter {
         bo.put("Publisher", b.getPublisher());
 
         var ba = new JSONArray();
-        for(var i : b.getAuthors()){
-            ba.add(i);
+        for(int i = 0 ; i < b.getAuthors().length; i++){
+            ba.add(b.getAuthors()[i]);
         }
         bo.put("Authors", ba);
 
