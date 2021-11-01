@@ -1,76 +1,63 @@
-import static java.lang.Thread.currentThread;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.Flow;
 
-import java.util.Random;
-import java.util.concurrent.Flow.Subscriber;
-import java.util.concurrent.Flow.Subscription;
+public abstract class StringSubscriber implements Flow.Subscriber {
 
-public class StringSubscriber implements Subscriber {
+	private String subscriberType;
+	private String subscriberName;
+	private String wordTemp;
 
-	private static final String LOG_MESSAGE_FORMAT = "Subscriber %s >> [%s] %s%n";
+	public StringSubscriber(){};
 
-	private static final int DEMAND = 3;
-	private static final Random RANDOM = new Random();
-
-	private String name;
-	private Subscription subscription;
-
-	private int count;
-	
-	public StringSubscriber(String name) {
-		this.name = name;
-	}
-
-	@Override
-	public void onSubscribe(Subscription subscription) {
-		log("Subscribed");
-		this.subscription = subscription;
-
-		count = DEMAND;
-		requestItems(DEMAND);
-	}
-
-	private void requestItems(int n) {
-		log("Requesting %d new items...", n);
-		subscription.request(n);
-	}
-
-	@Override
-	public void onNext(Integer item) {
-		if (item != null) {
-			log(item.toString());
-
-			synchronized (this) {
-				count--;
-
-				if (count == 0) {
-					if (RANDOM.nextBoolean()) {
-						count = DEMAND;
-						requestItems(count);
-					} else {
-						count = 0;
-						log("Cancelling subscription...");
-						subscription.cancel();
-					}
-				}
+	public StringSubscriber(String subType, String subName){
+		this.subscriberType = subType;
+		this.subscriberName = subName;
+		//init Text file
+		try {
+			File myObj = new File(this.subscriberName +".txt");
+			if (myObj.createNewFile()) {
+			  System.out.println("File created: " + myObj.getName());
+			} else {
+			  System.out.println("File already exists.");
+			  wordTemp = new String(Files.readAllBytes(Path.of(this.subscriberName+".txt")));
 			}
-		} else {
-			log("Null Item!");
-		}
+		  } catch (IOException e) {
+			System.out.println("An error occurred.");
+			e.printStackTrace();
+		  }
 	}
+
+	public void writeFile(String word){
+		try {
+			FileWriter myWriter = new FileWriter(this.subscriberName + ".txt");
+			myWriter.write(wordTemp + word + "\n");
+			myWriter.close();
+			this.onComplete();
+		  } catch (IOException e) {
+			System.out.println("An error occurred.");
+			this.onError(e);
+		  }
+		}
+
+	public abstract boolean subTypeSeperator(String textInput);
+
+	public abstract void onSubscribe(Flow.Subscription subscription);
+
+	public abstract void onNext(String item);
 
 	@Override
 	public void onComplete() {
-		log("Complete!");
+		System.out.println("Complete!");
 	}
 
 	@Override
 	public void onError(Throwable t) {
-		log("Subscriber Error >> %s", t);
+		t.printStackTrace();
 	}
 
-	private void log(String message, Object... args) {
-		String fullMessage = String.format(LOG_MESSAGE_FORMAT, this.name, currentThread().getName(), message);
-
-		System.out.printf(fullMessage, args);
-	}
+	
 }

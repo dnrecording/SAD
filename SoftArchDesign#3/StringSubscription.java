@@ -8,71 +8,73 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Flow.Publisher;
-import java.util.concurrent.Flow.Subscriber;
-import java.util.concurrent.Flow.Subscription;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class StringSubscription implements Flow.Subscription{
+public class StringSubscription implements Flow.Subscription {
 
-    private final ExecutorService executor;
+	private final ExecutorService executor;
 
-		private Subscriber subscriber;
-		private final AtomicInteger value;
-		private AtomicBoolean isCanceled;
+	private Flow.Subscriber subscriber;
+	private final AtomicInteger value;
+	private AtomicBoolean isCanceled;
 
-		public MySubscription(Subscriber subscriber, ExecutorService executor) {
-			this.subscriber = subscriber;
-			this.executor = executor;
+	private List subscriptions = Collections.synchronizedList(new ArrayList());
 
-			value = new AtomicInteger();
-			isCanceled = new AtomicBoolean(false);
+	private final CompletableFuture terminated = new CompletableFuture<>();
+
+	private static final String LOG_MESSAGE_FORMAT = "Publisher >> [%s] %s%n";
+
+	public StringSubscription(Flow.Subscriber subscriber, ExecutorService executor) {
+		this.subscriber = subscriber;
+		this.executor = executor;
+
+		value = new AtomicInteger();
+		isCanceled = new AtomicBoolean(false);
+	}
+
+	@Override
+	public void request(long n) {
+		if (isCanceled.get())
+			return;
+
+		if (n < 0)
+			executor.execute(() -> subscriber.onError(new IllegalArgumentException()));
+		else
+			publishItems(n);
+	}
+
+	@Override
+	public void cancel() {
+		isCanceled.set(true);
+
+		synchronized (subscriptions) {
+			subscriptions.remove(this);
+			if (subscriptions.size() == 0)
+				shutdown();
 		}
+	}
 
-		@Override
-		public void request(long n) {
-			if (isCanceled.get())
-				return;
+	private void publishItems(long n) {
+		for (int i = 0; i < n; i++) {
 
-			if (n < 0)
-				executor.execute(() -> subscriber.onError(new IllegalArgumentException()));
-			else
-				publishItems(n);
-		}
-
-		@Override
-		public void cancel() {
-			isCanceled.set(true);
-
-			synchronized (subscriptions) {
-				subscriptions.remove(this);
-				if (subscriptions.size() == 0)
-					shutdown();
-			}
-		}
-
-		private void publishItems(long n) {
-			for (int i = 0; i < n; i++) {
-
-				executor.execute(() -> {
-					int v = value.incrementAndGet();
-					log("publish item: [" + v + "] ...");
-					subscriber.onNext(v);
-				});
-			}
-		}
-
-		private void shutdown() {
-			log("Shut down executor...");
-			executor.shutdown();
-			newSingleThreadExecutor().submit(() -> {
-
-				log("Shutdown complete.");
-				terminated.complete(null);
+			executor.execute(() -> {
+				int v = value.incrementAndGet();
+				log("publish item: [" + v + "] ...");
+				subscriber.onNext(v);
 			});
 		}
+	}
 
+	private void shutdown() {
+		log("Shut down executor...");
+		executor.shutdown();
+		newSingleThreadExecutor().submit(() -> {
+
+			log("Shutdown complete.");
+			terminated.complete(null);
+		});
 	}
 
 	private void log(String message, Object... args) {
